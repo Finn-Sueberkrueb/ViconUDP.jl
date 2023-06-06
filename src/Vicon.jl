@@ -2,26 +2,55 @@ module Vicon
 
 using Rotations
 using Sockets
+using Dates
+using Statistics
 
-export init_vicon
-
-
+export ViconSystem, set_world!, read_vicon, close_vicon, transform_to_world, measure_input_frequenzy, start_async_read
 
 """
-    ItemStruct_raw
+    ItemStruct
 
 Struct for the Vicon UDP data
 """
-struct ItemStruct_raw
-    ItemID::UInt8
-    ItemDataSize::UInt16
+struct ItemStruct
+    #ItemID::UInt8
+    #ItemDataSize::UInt16
+    FrameNumber::UInt32
+    Timestamp::Int64
     ItemName::String
-    TransX::Float64
-    TransY::Float64
-    TransZ::Float64
-    RotX::Float64
-    RotY::Float64
-    RotZ::Float64
+    #TransX::Float64
+    #TransY::Float64
+    #TransZ::Float64
+    x_m::Vector{Float64}
+    #RotX::Float64
+    #RotY::Float64
+    #RotZ::Float64
+    R::Matrix{Float64}
+end
+
+
+"""
+    ViconSystem
+
+Struct for the Vicon System. 
+Opens the UDP socket and binds it to the given ip and port.
+"""
+mutable struct ViconSystem
+    socket::UDPSocket
+
+    R_Vicon2World::Matrix{Float64}
+    x_Vicon2World_m::Vector{Float64}
+
+
+    function ViconSystem(;ip=IPv4(0,0,0,0), port=51001)
+        socket = Sockets.UDPSocket();
+        Sockets.bind(socket,ip,port);
+
+        R_Vicon2World = [1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0];
+        x_Vicon2World_m = [0.0; 0.0; 0.0];
+
+        new(socket, R_Vicon2World, x_Vicon2World_m)
+    end
 end
 
 
@@ -29,46 +58,36 @@ end
 """
     reinterpret_Vicon(byte_string::Vector{UInt8})
 
-takes the byte_string from the Vicon UDP socket and returns a Vector of ItemStructs
+takes the byte_string from the Vicon UDP socket and returns a Vector of raw ItemStructs
 """
-function reinterpret_Vicon(byte_string::Vector{UInt8})
-    #println("byte_string size: ", size(byte_string))
-    Frame_Number = reinterpret(UInt32, byte_string[1:4])
-    #println("Frame_Number: ", (Frame_Number*1)[1])
-    ItemsInBlock = byte_string[5]
-    #println("ItemsInBlock: ", ItemsInBlock)
+function reinterpret_Vicon(byte_string::Vector{UInt8}, timestamp::Int64)
+    Frame_Number = reinterpret(UInt32, byte_string[1:4])[1] # Frame number of the UDP packet
+    ItemsInBlock = byte_string[5] # Number of items in the UDP packet
 
     Items = []
     for i in 0:(ItemsInBlock - 1)
         start = 6+i*75
-        #=
-        new_item_struct = ItemStruct_euler(   byte_string[start],
-                                        reinterpret(UInt16, byte_string[(start+1):(start+2)].*1)[1],
-                                        String(byte_string[(start+3):(start+26)]),
-                                        reinterpret(Float64, byte_string[(start+27):(start+34)])[1],
-                                        reinterpret(Float64, byte_string[(start+35):(start+42)])[1],
-                                        reinterpret(Float64, byte_string[(start+43):(start+50)])[1],
-                                        reinterpret(Float64, byte_string[(start+51):(start+58)])[1],
-                                        reinterpret(Float64, byte_string[(start+59):(start+66)])[1],
-                                        reinterpret(Float64, byte_string[(start+67):(start+74)])[1]
-                                )        
-        =#
 
-        x_W = [reinterpret(Float64, byte_string[(start+27):(start+34)])[1];
-               reinterpret(Float64, byte_string[(start+35):(start+42)])[1];
-               reinterpret(Float64, byte_string[(start+43):(start+50)])[1]]
-        
-        rot = Rotations.RotXYZ( reinterpret(Float64, byte_string[(start+51):(start+58)])[1],
-                                reinterpret(Float64, byte_string[(start+59):(start+66)])[1],
-                                reinterpret(Float64, byte_string[(start+67):(start+74)])[1])
-        R_W = Matrix(rot)
+        x_Vicon_mm = [  reinterpret(Float64, byte_string[(start+27):(start+34)])[1]; # Pos X
+                        reinterpret(Float64, byte_string[(start+35):(start+42)])[1]; # Pos Y
+                        reinterpret(Float64, byte_string[(start+43):(start+50)])[1]] # Pos Z
+        x_Vicon_m = x_Vicon_mm / 1000.0 # in meter
 
-        new_item_struct = ItemStruct(   String(byte_string[(start+3):(start+26)]),
-                                        x_W,
-                                        R_W,
-                                    )        
 
-       push!(Items, new_item_struct)
+        R_Vicon = Matrix(Rotations.RotXYZ(  reinterpret(Float64, byte_string[(start+51):(start+58)])[1], # Rot X
+                                            reinterpret(Float64, byte_string[(start+59):(start+66)])[1], # Rot Y
+                                            reinterpret(Float64, byte_string[(start+67):(start+74)])[1])) # Rot Z
+
+        # TODO: remove ending spaces
+        ItemName = String(byte_string[(start+3):(start+26)])
+
+        new_item = ItemStruct(  Frame_Number,
+                                timestamp,
+                                ItemName,
+                                x_Vicon_m,
+                                R_Vicon
+                                ) 
+       push!(Items, new_item)
     end
 
     return Items
@@ -76,139 +95,206 @@ end
 
 
 
-
-
-# TODO: add function
 """
-    measure_input_frequenzy(byte_string::Vector{UInt8})
+    close_vicon(vicon::ViconSystem)
 
 takes the byte_string from the Vicon UDP socket and returns a Vector of ItemStructs
 """
-
-
-
-# TODO: add visualization
-"""
-    measure_input_frequenzy(byte_string::Vector{UInt8})
-
-takes the byte_string from the Vicon UDP socket and returns a Vector of ItemStructs
-"""
-
-
-
-
-
+function close_vicon(vicon::ViconSystem)
+    #TODO: Threads.atomic_xchg!(atom_running, false) # stop async read
+    close(vicon.socket)
+end
 
 
 """
-    init_vicon(;ip=IPv4(0,0,0,0), port=51001)
+    read_vicon(vicon::ViconSystem)
 
-init_vicon opens the UDP socket and binds it to the given ip and port.
-Returns functions read_vicon (blocking) and close_vicon
+reads a UDP package and returns a vector of items.
+"""    
+function read_vicon(vicon::ViconSystem)
+    raw_recived = Sockets.recv(vicon.socket)
+    timestamp = Dates.value.(now());
+    Items = reinterpret_Vicon(raw_recived, timestamp)
+    return Items
+end
 
-DLR Vicon System.
-IP: 192.168.222.2
+
 """
-function init_vicon(;ip=IPv4(0,0,0,0), port=51001)
-    
-    vicon_UDP_socket = UDPSocket()
-    bind(vicon_UDP_socket,ip,port)
+    read_vicon(vicon::ViconSystem)
 
-    R_Vicon2World = [1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0]
-    x_Vicon2World = [0.0; 0.0; 0.0]
-
-    # atomic operators for async read
-    atom_pos_x_World_Meter = Threads.Atomic{Float64}(0.0);
-    atom_pos_y_World_Meter = Threads.Atomic{Float64}(0.0);
-    atom_pos_z_World_Meter = Threads.Atomic{Float64}(0.0);
-    atom_running = Threads.Atomic{Bool}(true);
-
-
-    function close_vicon()
-        Threads.atomic_xchg!(atom_running, false)
-        close(vicon_UDP_socket)
-    end
-
-    # TODO: add timeout
-    # TODO: set Buffersize
-    function read_vicon(; ItemName = "CF_V2")
-        raw_recived = Sockets.recv(vicon_UDP_socket)
-        Items = reinterpret_Vicon(raw_recived)
-        for i in Items
-            if startswith(i.ItemName, ItemName)
-                return i
-            end
+reads a UDP package and returns the selected item.
+"""    
+function read_vicon(vicon::ViconSystem, ItemName::String)
+    Items = read_vicon(vicon)
+    for i in Items
+        if startswith(i.ItemName, ItemName)
+            return i
         end
-        println("No ItemName (", ItemName, ") found!")
-        return 0
     end
+    println("No ItemName (", ItemName, ") found!")
+    return nothing
+end
 
 
+"""
+    set_world!(vicon::ViconSystem, x_Vicon2World_m::Vector, R_Vicon2World::Matrix)
 
-    # Set Zerro position and orientation from Vicon System to World
-    function set_zerro(;ItemName="BiggestObject")
+Set manual transformation from Vicon System to World.
+"""    
+function set_world!(vicon::ViconSystem, x_Vicon2World_m::Vector, R_Vicon2World::Matrix)
+    vicon.x_Vicon2World_m = x_Vicon2World_m
+    vicon.R_Vicon2World = R_Vicon2World
+    return nothing
+end
 
-        raw_recived = Sockets.recv(vicon_UDP_socket)
-        Items = reinterpret_Vicon(raw_recived)
 
-        for i in Items
-            println("Zerro Item = ", i.ItemName, " (found and set)")
-            if startswith(i.ItemName, ItemName)
-                x_Vicon2World = i.x_W
-                R_Vicon2World = i.R_W
-                return x_Vicon2World, R_Vicon2World
-            end
-        end
+"""
+    set_world!(vicon::ViconSystem, ItemName::String)
 
-        println("No ItemName ", ItemName, " for zerro found!")
-        return x_Vicon2World, R_Vicon2World
+Set transformation from Vicon System to World based on a given item.
+"""    
+function set_world!(vicon::ViconSystem, ItemName::String)
+    item_Vicon = read_vicon(vicon, ItemName)
+
+    if item_Vicon === nothing
+        println("No item (", ItemName, ") found!")
+        return nothing
+    else
+        vicon.x_Vicon2World_m = item_Vicon.x_m
+        vicon.R_Vicon2World = item_Vicon.R
+        return vicon.x_Vicon2World_m, vicon.R_Vicon2World
     end
+end
 
 
-    # Get the last position from atomic operator
-    function get_last_pos()
-        return [atom_pos_x_World_Meter[]; atom_pos_y_World_Meter[]; atom_pos_z_World_Meter[]]
+"""
+    transform_to_world(vicon::ViconSystem, Item::ItemStruct)
+
+Set transformation from Vicon System to World based on a given item.
+"""   
+function transform_to_world(vicon::ViconSystem, Item_Vicon::ItemStruct)
+
+    x_W_m = transpose(vicon.R_Vicon2World) * (Item_Vicon.x_m .- vicon.x_Vicon2World_m)
+    R_W = transpose(vicon.R_Vicon2World) * Item_Vicon.R
+
+    Item_W = ItemStruct(    Item_Vicon.FrameNumber,
+                            Item_Vicon.Timestamp,
+                            Item_Vicon.ItemName,
+                            x_W_m,
+                            R_W)
+
+    return Item_W
+end
+
+
+
+"""
+    clear_UDP_buffer(vicon::ViconSystem)
+
+Helper function that clears the UDP buffer.
+The timestamp is set as soon as the packet is read. No timestamp is transmitted via the UDP interface.
+The UDP buffer must therefore be cleard before reading starts.
+
+TODO: Is there a better variant via the Julia socket?
+"""
+function clear_UDP_buffer(vicon::ViconSystem)
+
+    items = read_vicon(vicon)
+    last_timestamp = items[1].Timestamp
+    current_timestamp = last_timestamp
+
+    while (current_timestamp - last_timestamp) < 2
+        last_timestamp = current_timestamp
+        items = read_vicon(vicon)
+        current_timestamp = items[1].Timestamp
     end
-
-
-    function read_vicon_async()
-        while atom_running[]
-            CF_Item_Vicon = read_vicon()
-            if CF_Item_Vicon != 0
-                
-                CF_Item_W = transform_to_world(CF_Item_Vicon)
-                # takes the item of the cannel if it is not read and there is a new one
-                Threads.atomic_xchg!(atom_pos_x_World_Meter, CF_Item_W.x_W[1])
-                Threads.atomic_xchg!(atom_pos_y_World_Meter, CF_Item_W.x_W[2])
-                Threads.atomic_xchg!(atom_pos_z_World_Meter, CF_Item_W.x_W[3])
-            end
-        end
-        println("Stoped async vicon read ")
-    end;
-
-
-    function start_async_read()        
-        task = @async read_vicon_async()
-    end;
-
-
-    function transform_to_world(CF_Item_Vicon)
-
-        x_W = transpose(R_Vicon2World) * (CF_Item_Vicon.x_W .- x_Vicon2World) / 1000.0 # in meter
-        R_W = transpose(R_Vicon2World) * CF_Item_Vicon.R_W
-
-        CF_Item_W = ItemStruct( CF_Item_Vicon.ItemName,
-                                x_W,
-                                R_W)    
-
-        return CF_Item_W
-    end
-
-    return close_vicon, set_zerro, start_async_read, get_last_pos
 end
 
 
 
 
+"""
+    measure_input_frequenzy(byte_string::Vector{UInt8})
 
+takes the byte_string from the Vicon UDP socket and returns a Vector of ItemStructs
+"""
+function measure_input_frequenzy(vicon::ViconSystem)
+    clear_UDP_buffer(vicon)
+
+    numer_of_samples = 101
+    timestamps = []
+    for i in 1:numer_of_samples
+        items = read_vicon(vicon)
+        push!(timestamps, items[1].Timestamp)
+    end
+
+    diff_ms = timestamps[2:end] .- timestamps[1:(end-1)]
+    diff_ms_mean = mean(diff_ms)
+    frequenzy = 1000/diff_ms_mean
+    println("Mean time between UDP packages: ", diff_ms_mean, " ms. (", frequenzy, " Hz)")
+    println("Recived ", numer_of_samples - 1, " packages in ", (timestamps[end] - timestamps[1]), "ms.")
+    return frequenzy
 end
+
+
+
+
+"""
+    start_async_read(vicon::ViconSystem, ItemName::String, buffer_size = 10)  
+
+Starts a asyncron read from Vicon System. Returns a function that returns the latest item.
+buffer_size is the size of the Channel sending data from the async task.
+"""
+function start_async_read(vicon::ViconSystem, ItemName::String; buffer_size = 10)
+
+    # channel for async read
+    item_channel = Channel{ItemStruct}(buffer_size);
+
+    latest_item = ItemStruct(0, 0, "", [0.0; 0.0; 0.0], [1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0])
+
+    function read_vicon_async(item_channel::Channel, vicon::ViconSystem, ItemName::String)
+        while true # TODO: add stop condition
+            item_Vicon = read_vicon(vicon, ItemName)
+            # If the buffer is full, take one item out.
+            if Base.n_avail(item_channel) >= (buffer_size-1)
+                take!(item_channel)
+            end
+            try
+                put!(item_channel, item_Vicon)
+            catch y
+                # If the put fails the channel is closed.
+                # ... variant to finish the task.
+                break
+            end
+        end
+    end;
+
+
+    function get_latest_item()
+        # read all items from the Buffer. The last one is the newest one
+        while isready(item_channel)
+            latest_item = take!(item_channel)
+        end
+        return latest_item
+    end
+
+    function stop_read_vicon_async()
+        close(item_channel)
+        sleep(1)
+        if istaskdone(task)
+            println("async vicon read is stopped.")
+            return true
+        else
+            println("async vicon read is still running.")
+            return false
+        end
+    end
+
+    task = Threads.@spawn read_vicon_async(item_channel, vicon, ItemName);
+    return get_latest_item, stop_read_vicon_async
+end;
+         
+
+
+
+end # module
