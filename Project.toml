@@ -1,7 +1,7 @@
 name = "ViconUDP"
 uuid = "e67f3e0e-e319-4e6a-90db-462f780913e2"
 authors = ["Finn Süberkrüb"]
-version = "1.0.0"
+version = "1.0.1"
 
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
