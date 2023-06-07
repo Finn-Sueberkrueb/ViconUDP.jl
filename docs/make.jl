@@ -3,9 +3,9 @@ import Pkg;
 Pkg.add("Documenter")
 using Documenter
 
-include("../src/Vicon.jl")
+include("../src/ViconUDP.jl")
 
-makedocs(   sitename="Vicon.jl",
+makedocs(   sitename="ViconUDP.jl",
             format = Documenter.HTML(prettyurls = false),
             pages = [
                     "index.md",
@@ -17,5 +17,5 @@ makedocs(   sitename="Vicon.jl",
 
 
 deploydocs(
-    repo = "github.com/Finn-Sueberkrueb/Vicon.jl.git",
+    repo = "github.com/Finn-Sueberkrueb/ViconUDP.jl.git",
 )

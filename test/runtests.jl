@@ -1,7 +1,7 @@
-using Vicon
+using ViconUDP
 using Test
 
-@testset "Vicon.jl" begin
+@testset "ViconUDP.jl" begin
     
     # transformation test
     vicon_sys = ViconSystem(;port=51001);

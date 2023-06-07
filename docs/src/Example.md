@@ -2,7 +2,7 @@
 # Example
 
 ```julia
-using Vicon
+using ViconUDP
 
 # initialize Vicon
 vicon = ViconSystem(;port=51001);

@@ -1,5 +1,5 @@
 # Functions
 ```@autodocs
-Modules = [Vicon]
+Modules = [ViconUDP]
 Order   = [:function, :type]
 ```

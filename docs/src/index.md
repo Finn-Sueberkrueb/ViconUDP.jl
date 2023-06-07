@@ -8,5 +8,5 @@ This packet receives the UDP packets from a Vicon system and interprets them.
 ## Autor
 Finn Süberkrüb
 
-[Vicon.jl@rpex.de](mailto:Vicon.jl@rpex.de)
+[ViconUDP.jl@rpex.de](mailto:ViconUDP.jl@rpex.de)
 

@@ -1,11 +1,11 @@
-# Vicon
+# ViconUDP
 
-[![CI](https://github.com/Finn-Sueberkrueb/Vicon.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/Finn-Sueberkrueb/Vicon.jl/actions/workflows/ci.yml)
+[![CI](https://github.com/Finn-Sueberkrueb/ViconUDP.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/Finn-Sueberkrueb/ViconUDP.jl/actions/workflows/ci.yml)
 
 
 ## Documentation
 
-[https://finn-sueberkrueb.github.io/Vicon.jl/dev/Module.html](https://finn-sueberkrueb.github.io/Vicon.jl/dev/Module.html)
+[https://finn-sueberkrueb.github.io/ViconUDP.jl/dev/Module.html](https://finn-sueberkrueb.github.io/ViconUDP.jl/dev/Module.html)
 
 
 ## Vicon Tracker configuration
@@ -17,7 +17,7 @@ On the System tab, when you click on the Local Vicon System node, the following 
 
 ## Example
 ```julia
-using Vicon
+using ViconUDP
 
 # initialize Vicon
 vicon = ViconSystem(;port=51001);

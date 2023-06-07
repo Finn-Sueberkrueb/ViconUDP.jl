@@ -1,4 +1,4 @@
-module Vicon
+module ViconUDP
 
 using Rotations
 using Sockets
