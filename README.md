@@ -1,6 +1,7 @@
 # Vicon
 
-[![Build Status](https://github.com/Finn-Sueberkrueb/Vicon.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/Finn-Sueberkrueb/Vicon.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![CI](https://github.com/Finn-Sueberkrueb/Vicon.jl/actions/workflows/ci.yml/badge.svg)](https://github.com/Finn-Sueberkrueb/Vicon.jl/actions/workflows/ci.yml)
+
 
 ## Documentation
 
