@@ -1,5 +1,8 @@
 # Run this file to build a new documentation
+import Pkg; 
+Pkg.add("Documenter")
 using Documenter
+
 include("../src/Vicon.jl")
 
 makedocs(   sitename="Vicon.jl",
@@ -11,3 +14,8 @@ makedocs(   sitename="Vicon.jl",
                     "Functions" => "Module.md",
                     ],
         )
+
+
+deploydocs(
+    repo = "github.com/Finn-Sueberkrueb/Vicon.jl.git",
+)
