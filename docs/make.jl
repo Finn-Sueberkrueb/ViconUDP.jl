@@ -1,7 +1,6 @@
 # Run this file to build a new documentation
 using Documenter
 include("../src/Vicon.jl")
-pwd()
 
 makedocs(   sitename="Vicon.jl",
             format = Documenter.HTML(prettyurls = false),
