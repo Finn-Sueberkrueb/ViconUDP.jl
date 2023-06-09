@@ -260,7 +260,9 @@ function start_async_read(vicon::ViconSystem, ItemName::String; buffer_size = 10
                 take!(item_channel)
             end
             try
-                put!(item_channel, item_Vicon)
+                if item_Vicon === nothing
+                    put!(item_channel, item_Vicon)
+                end
             catch y
                 # If the put fails the channel is closed.
                 # ... variant to finish the task.
